@@ -1,0 +1,14 @@
+{
+  "name": "tests-propeller-sdet-task-gjorgi-stamkov",
+  "version": "1.0.0",
+  "description": "Cypress API tests for Propeller GraphQL SDET assignment",
+  "private": true,
+  "scripts": {
+    "test": "cypress run",
+    "test:open": "cypress open",
+    "cy:verify": "cypress verify"
+  },
+  "devDependencies": {
+    "cypress": "^14.3.0"
+  }
+}

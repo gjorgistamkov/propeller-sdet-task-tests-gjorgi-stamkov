@@ -1,0 +1,65 @@
+# Bonus: CI — build (install) + test (Cypress) against the Propeller API in Docker.
+#
+# This test repo does not contain the API. Add these repository secrets in GitHub:
+#   PROP_API_REPO   — e.g. "your-org/propeller-sdet-task" (the assignment API repo)
+#   PROP_API_TOKEN  — fine-grained PAT with Contents: Read on that repo (if private)
+#
+# For a public API fork, you can set PROP_API_TOKEN to ${{ secrets.GITHUB_TOKEN }} by
+# editing the checkout step, or use a public clone URL without a token.
+
+name: API tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  cypress-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout test project
+        uses: actions/checkout@v4
+
+      - name: Checkout Propeller API
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.PROP_API_REPO }}
+          path: propeller-api
+          token: ${{ secrets.PROP_API_TOKEN }}
+
+      - name: Start API stack (Postgres + Nest)
+        working-directory: propeller-api
+        run: docker compose up --build -d
+
+      - name: Wait for GraphQL
+        run: |
+          for i in {1..40}; do
+            code=$(curl -s -o /tmp/gql.json -w "%{http_code}" -X POST http://localhost:3000/graphql \
+              -H "Content-Type: application/json" \
+              -H "x-tenant-id: tenant-a" \
+              -d '{"query":"query { products { id } }"}')
+            if [ "$code" = "200" ] && grep -q '"data"' /tmp/gql.json; then
+              echo "API is up"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "API did not become ready"
+          cat /tmp/gql.json 2>/dev/null || true
+          exit 1
+
+      - name: Seed database
+        working-directory: propeller-api
+        run: docker compose run --rm seed
+
+      - name: Install test dependencies
+        run: npm ci
+
+      - name: Run Cypress (headless)
+        env:
+          CYPRESS_apiUrl: http://localhost:3000/graphql
+        run: npx cypress run
